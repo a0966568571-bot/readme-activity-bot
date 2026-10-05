@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# readme-activity-bot
+.cache/
+metrics.json
+*.diff
