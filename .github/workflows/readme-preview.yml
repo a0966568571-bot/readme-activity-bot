@@ -1,0 +1,72 @@
+name: README Preview
+
+on:
+  pull_request:
+
+# Uses the built-in GITHUB_TOKEN only, never REPO_TOKEN, so it also works
+# for pull requests from forks, where secrets are not available.
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write   # to post and update the preview comment
+
+# A new push to the same PR cancels the older preview.
+concurrency:
+  group: readme-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Restore only: PR runs read main's ETag cache but never overwrite it.
+      - name: Restore ETag cache (read-only)
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache
+          key: etag-cache-${{ github.run_id }}
+          restore-keys: etag-cache-
+
+      - name: Dry run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/update_readme.py --dry-run --diff-out readme-preview.diff
+
+      - name: Post or update the preview comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "<!-- readme-preview -->"
+            echo "### README preview"
+            if [ -s readme-preview.diff ]; then
+              echo "With current repo activity, the bot would write this into the README of this branch:"
+              echo
+              echo '```diff'
+              cat readme-preview.diff
+              echo '```'
+            else
+              echo "No change to the Recent Activity block."
+            fi
+            echo
+            echo "<sub>Commit ${HEAD_SHA::7} · [workflow run](${RUN_URL})</sub>"
+          } > comment.md
+
+          # One comment per PR: find ours by its hidden marker and edit it in place.
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- readme-preview -->")) | .id' | head -n 1)
+          # API responses go to /dev/null: nothing from them is printed to the log.
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comment.md > /dev/null
+            echo "Updated preview comment $id"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@comment.md > /dev/null
+            echo "Created preview comment"
+          fi
