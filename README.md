@@ -1,5 +1,8 @@
 # readme-activity-bot
 
+[![Update README](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/update-readme.yml/badge.svg?branch=main)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/update-readme.yml)
+[![Validate README](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/validate-readme.yml/badge.svg?branch=main)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/validate-readme.yml)
+
 This README keeps its own **Recent Activity** section up to date.
 A GitHub Actions workflow reads the latest commits, merged pull requests and closed issues from the GitHub REST API, then rewrites only the block between the two markers below.
 
@@ -30,6 +33,16 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 2. `scripts/update_readme.py` fetches recent activity and renders it as Markdown.
 3. Only the text between `<!-- ACTIVITY:START -->` and `<!-- ACTIVITY:END -->` is replaced. Everything else in this file is left alone.
 4. If the new block is identical to the old one, nothing is committed.
+
+## Guardrails
+
+| Workflow | When | What it does |
+|---|---|---|
+| `validate-readme.yml` | every PR and push to `main` | fails if the markers are missing, duplicated or out of order; runs unit tests on Python 3.9 and 3.13 |
+| `readme-preview.yml` | every PR | dry run, then posts the README diff as one PR comment that is updated on each push |
+| `metrics-report.yml` | manual | collects `metrics.json` from past runs into one report |
+
+API calls retry with exponential backoff on 429/5xx and on rate-limit 403s. Settings live in repository variables (`MAX_RETRIES`, `BACKOFF_BASE`, `MAX_WAIT`). A manual run can fake failures to test this (`simulate_status`, `simulate_count`).
 
 ## Project tracking
 
