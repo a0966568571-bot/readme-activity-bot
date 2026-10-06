@@ -16,7 +16,7 @@ import tempfile
 from datetime import datetime, timedelta
 
 WORKFLOW = "update-readme.yml"
-SCHEDULE_MINUTES = (7, 22, 37, 52)   # must match the cron in update-readme.yml
+SCHEDULE_MINUTES = (7, 22, 37, 52)   # the temporary 15-minute cron used while collecting data
 
 
 def gh(*args):
