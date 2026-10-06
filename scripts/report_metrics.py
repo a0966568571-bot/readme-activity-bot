@@ -104,13 +104,14 @@ def render_markdown(summary, runs, since):
         if isinstance(v, dict):
             v = ", ".join("%s: %s" % item for item in sorted(v.items()))
         lines.append("| %s | %s |" % (k, "-" if v is None else v))
-    lines += ["", "## Runs", "", "| Created (UTC) | Event | Result | Changed | API calls | 304 hits | Script s |",
-              "|---|---|---|---|---|---|---|"]
+    lines += ["", "## Runs", "", "| Created (UTC) | Event | Result | Changed | API calls | 304 hits | Script s | Endpoints |",
+              "|---|---|---|---|---|---|---|---|"]
     for r in runs:
         x = r.get("metrics") or {}
-        lines.append("| %s | %s | %s | %s | %s | %s | %s |" % (
+        endpoints = " ".join("%s:%s" % e for e in sorted((x.get("endpoints") or {}).items())) or "-"
+        lines.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
             r["createdAt"], r["event"], r["conclusion"], x.get("changed", "-"),
-            x.get("api_calls", "-"), x.get("cache_hits", "-"), x.get("duration_seconds", "-")))
+            x.get("api_calls", "-"), x.get("cache_hits", "-"), x.get("duration_seconds", "-"), endpoints))
     return "\n".join(lines) + "\n"
 
 

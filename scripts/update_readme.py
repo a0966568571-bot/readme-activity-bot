@@ -88,6 +88,7 @@ def new_metrics():
         "wait_seconds": 0.0,
         "simulated_failures": 0,
         "rate_limit_remaining": None,
+        "endpoints": {},           # final HTTP status per endpoint, e.g. {"commits": 304}
     }
 
 
@@ -149,6 +150,7 @@ def fetch_json(path, token, cache, cfg, metrics, sleep=time.sleep):
         status, resp_headers, body = _send(url, headers, cfg, metrics)
         if "x-ratelimit-remaining" in resp_headers:
             metrics["rate_limit_remaining"] = int(resp_headers["x-ratelimit-remaining"])
+        metrics["endpoints"][path.split("?")[0].rsplit("/", 1)[-1]] = status
 
         if status == 304 and cached:
             metrics["cache_hits"] += 1

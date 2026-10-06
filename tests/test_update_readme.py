@@ -92,6 +92,7 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(metrics["retries"], 2)
         self.assertEqual(len(waits), 2)
         self.assertNotIn("secret-token", str(ctx.exception))
+        self.assertEqual(metrics["endpoints"], {"x": 429})
 
 
 if __name__ == "__main__":
