@@ -1,6 +1,9 @@
+import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import update_readme as u  # noqa: E402
@@ -93,6 +96,21 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(len(waits), 2)
         self.assertNotIn("secret-token", str(ctx.exception))
         self.assertEqual(metrics["endpoints"], {"x": 429})
+
+    def test_failed_run_still_writes_metrics(self):
+        with tempfile.TemporaryDirectory() as d:
+            readme, metrics_path = os.path.join(d, "README.md"), os.path.join(d, "metrics.json")
+            with open(readme, "w") as f:
+                f.write(README)
+            env = {"GITHUB_TOKEN": "secret-token", "GITHUB_REPOSITORY": "o/r", "CACHE_DIR": d,
+                   "METRICS_PATH": metrics_path, "SIMULATE_STATUS": "403", "SIMULATE_COUNT": "1"}
+            with mock.patch.dict(os.environ, env, clear=True), self.assertRaises(SystemExit):
+                u.main(["--readme", readme])
+            with open(metrics_path) as f:
+                m = json.load(f)
+            self.assertIn("HTTP 403", m["error"])
+            self.assertEqual(m["endpoints"], {"commits": 403})
+            self.assertNotIn("secret-token", json.dumps(m))
 
 
 if __name__ == "__main__":
