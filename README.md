@@ -13,17 +13,20 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
-- 2026-10-05 [`3cd2bd8`](https://github.com/a0966568571-bot/readme-activity-bot/commit/3cd2bd8310e14b8282890bdbd2d2a5865848b0ad) Merge pull request #3 from a0966568571-bot/1-update-readme-activity, by a0966568571-bot
-- 2026-10-05 [`ee79209`](https://github.com/a0966568571-bot/readme-activity-bot/commit/ee792094903073177f6d084f549e144143375ad6) Add README update script, tests and workflow, by a0966568571-bot
-- 2026-10-05 [`92da88b`](https://github.com/a0966568571-bot/readme-activity-bot/commit/92da88b1b01ad82551535450812b5cca975616b1) Add README template with activity markers, by a0966568571-bot
-- 2026-10-05 [`9cbc742`](https://github.com/a0966568571-bot/readme-activity-bot/commit/9cbc74286c955962c14505d2078096fda9fab649) Initial commit, by a0966568571-bot
+- 2026-10-06 [`f93ad96`](https://github.com/a0966568571-bot/readme-activity-bot/commit/f93ad9699b5056c7bc1dda91260edc464fdfb9cf) Merge pull request #4 from a0966568571-bot/2-ci-guardrails, by a0966568571-bot
+- 2026-10-06 [`170421f`](https://github.com/a0966568571-bot/readme-activity-bot/commit/170421ff2f46be150bd02d3f7e0805e42676d282) Revert the schedule to once a day, by a0966568571-bot
+- 2026-10-06 [`761ab2a`](https://github.com/a0966568571-bot/readme-activity-bot/commit/761ab2ab7f0d4ee7a2401b6b51ea0e7f93852271) Write run metrics even when the run fails, by a0966568571-bot
+- 2026-10-06 [`96e4598`](https://github.com/a0966568571-bot/readme-activity-bot/commit/96e45989c7fe0ac3f17db366caebdec77d1f7b48) Demo C: restore the END marker and undo the hand edit, by a0966568571-bot
+- 2026-10-06 [`37dc13e`](https://github.com/a0966568571-bot/readme-activity-bot/commit/37dc13e31d290fe4e1a2100cd2574232c60175c3) Demo B: delete the END marker, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-06 [#4 Add CI guardrails and run reporting](https://github.com/a0966568571-bot/readme-activity-bot/pull/4), by a0966568571-bot
 - 2026-10-05 [#3 Automate README Recent Activity section](https://github.com/a0966568571-bot/readme-activity-bot/pull/3), by a0966568571-bot
 
 **Recently closed issues**
 
+- 2026-10-06 [#2 Add CI guardrails and run reporting for README automation](https://github.com/a0966568571-bot/readme-activity-bot/issues/2)
 - 2026-10-05 [#1 Automate README "Recent Activity" section with GitHub Actions](https://github.com/a0966568571-bot/readme-activity-bot/issues/1)
 <!-- ACTIVITY:END -->
 
