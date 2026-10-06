@@ -2,11 +2,21 @@ name: Update README
 
 on:
   schedule:
-    # TEMPORARY: every 15 minutes to collect run data for #2.
-    # Off the hour on purpose: scheduled runs at :00 are the most delayed.
-    # #2 reverts this to once a day.
-    - cron: "7,22,37,52 * * * *"
+    # Once a day at 00:07 UTC (08:07 Taiwan). Off the hour on purpose:
+    # scheduled runs at :00 are the most delayed. Missed runs are harmless
+    # because every run rebuilds the block from scratch.
+    - cron: "7 0 * * *"
   workflow_dispatch:
+    inputs:
+      simulate_status:
+        description: "Fake HTTP status for the first N requests (0 = off). 429/503 are retried, 403 is not."
+        type: choice
+        options: ["0", "429", "503", "403"]
+        default: "0"
+      simulate_count:
+        description: "How many requests should fail"
+        type: string
+        default: "0"
   push:
     branches: [main]
     # The bot only changes README.md, so its own push never starts another run.
@@ -43,12 +53,22 @@ jobs:
         id: update
         env:
           GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
-          MAX_RETRIES: "4"
-          BACKOFF_BASE: "2"
-        run: python3 scripts/update_readme.py
+          # Tunable in Settings > Secrets and variables > Actions > Variables, no code change needed.
+          MAX_RETRIES: ${{ vars.MAX_RETRIES || '4' }}
+          BACKOFF_BASE: ${{ vars.BACKOFF_BASE || '2' }}
+          MAX_WAIT: ${{ vars.MAX_WAIT || '60' }}
+          SIMULATE_STATUS: ${{ inputs.simulate_status || '0' }}
+          SIMULATE_COUNT: ${{ inputs.simulate_count || '0' }}
+        # Only main may write. A manual run on any other branch is a dry run.
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            python3 scripts/update_readme.py
+          else
+            python3 scripts/update_readme.py --dry-run
+          fi
 
       - name: Commit and push if changed
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.changed == 'true' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

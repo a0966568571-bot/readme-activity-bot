@@ -1,0 +1,32 @@
+name: Metrics Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "Include runs created at or after this UTC time"
+        default: "2026-10-05T17:24:00Z"
+
+permissions:
+  contents: read
+  actions: read   # list runs and download their metrics artifacts
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Passed through env, not pasted into the script, so input text cannot inject shell commands.
+          SINCE: ${{ inputs.since }}
+        run: |
+          python3 scripts/report_metrics.py --since "$SINCE" \
+            --out reports/metrics.md --json reports/metrics.json > /dev/null
+          cat reports/metrics.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metrics-report
+          path: reports/

@@ -88,6 +88,7 @@ def new_metrics():
         "wait_seconds": 0.0,
         "simulated_failures": 0,
         "rate_limit_remaining": None,
+        "endpoints": {},           # final HTTP status per endpoint, e.g. {"commits": 304}
     }
 
 
@@ -149,6 +150,7 @@ def fetch_json(path, token, cache, cfg, metrics, sleep=time.sleep):
         status, resp_headers, body = _send(url, headers, cfg, metrics)
         if "x-ratelimit-remaining" in resp_headers:
             metrics["rate_limit_remaining"] = int(resp_headers["x-ratelimit-remaining"])
+        metrics["endpoints"][path.split("?")[0].rsplit("/", 1)[-1]] = status
 
         if status == 304 and cached:
             metrics["cache_hits"] += 1
@@ -249,6 +251,22 @@ def write_outputs(metrics, diff_text):
                 f.write("\n<details><summary>README diff</summary>\n\n```diff\n%s\n```\n</details>\n" % diff_text)
 
 
+def finish_metrics(metrics, cfg, args, started, changed, diff_text, error=None):
+    metrics.update({
+        "mode": "dry-run" if args.dry_run else "write",
+        "changed": changed,
+        "error": error,
+        "duration_seconds": round(time.time() - started, 2),
+        "wait_seconds": round(metrics["wait_seconds"], 2),
+        "event": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+        "finished_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    with open(cfg.metrics_path, "w") as f:
+        json.dump(metrics, f, indent=2)
+    write_outputs(metrics, diff_text)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group()
@@ -280,7 +298,13 @@ def main(argv=None):
     started = time.time()
     cache = load_cache(cfg)
 
-    new_text = replace_block(text, render(*collect(repo, token, cache, cfg, metrics)))
+    try:
+        data = collect(repo, token, cache, cfg, metrics)
+    except SystemExit as e:
+        # A failed run needs its metrics most, so record them before giving up.
+        finish_metrics(metrics, cfg, args, started, changed=False, diff_text="", error=str(e))
+        raise
+    new_text = replace_block(text, render(*data))
     changed = new_text != text
     diff_text = "".join(difflib.unified_diff(text.splitlines(True), new_text.splitlines(True),
                                              "README.md (current)", "README.md (updated)"))
@@ -297,18 +321,7 @@ def main(argv=None):
             f.write(diff_text)
     save_cache(cfg, cache)
 
-    metrics.update({
-        "mode": "dry-run" if args.dry_run else "write",
-        "changed": changed,
-        "duration_seconds": round(time.time() - started, 2),
-        "wait_seconds": round(metrics["wait_seconds"], 2),
-        "event": os.environ.get("GITHUB_EVENT_NAME", "local"),
-        "run_id": os.environ.get("GITHUB_RUN_ID", ""),
-        "finished_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    })
-    with open(cfg.metrics_path, "w") as f:
-        json.dump(metrics, f, indent=2)
-    write_outputs(metrics, diff_text)
+    finish_metrics(metrics, cfg, args, started, changed, diff_text)
     return 0
 
 
