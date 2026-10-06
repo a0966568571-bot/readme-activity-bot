@@ -25,7 +25,6 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 **Recently closed issues**
 
 - 2026-10-05 [#1 Automate README "Recent Activity" section with GitHub Actions](https://github.com/a0966568571-bot/readme-activity-bot/issues/1)
-<!-- ACTIVITY:END -->
 
 ## How it works
 
