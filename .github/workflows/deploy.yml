@@ -4,42 +4,76 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: Make one stage's smoke test fail, to demo the rollback
+        type: choice
+        options: [none, dev, staging, production]
+        default: none
 
 # Default for every job: read only. A job that needs more asks for it itself.
 permissions:
   contents: read
 
-# Two pushes close together should not race to create releases.
+# One release train at a time. A run waiting for production approval holds the
+# lock, so a newer push waits instead of racing it for the next version number.
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff==0.17.0
+      - run: ruff check scripts tests
+
+  test:
+    name: test (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -v
+
   build:
+    needs: [lint, test]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # all tags, so next_version.py can see what is already released
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      # Python has no compile step, so "build" means: tests pass and every file compiles.
-      - name: Test
-        run: |
-          python -m unittest discover -s tests
-          python -m compileall -q scripts
-
-      # VERSION holds MAJOR.MINOR. The run number makes each build's tag unique.
+      # VERSION holds MAJOR.MINOR; the patch number is bumped from the existing tags.
       - name: Version
         id: version
-        run: echo "version=$(cat VERSION).${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+        run: python scripts/next_version.py
 
-      - name: Package
-        run: zip -r build.zip scripts README.md LICENSE VERSION
+      - name: Build
+        run: |
+          python -m compileall -q scripts
+          printf 'version=%s\ncommit=%s\nrun=%s\n' \
+            "${{ steps.version.outputs.version }}" "$GITHUB_SHA" "$GITHUB_RUN_ID" > BUILD_INFO
+          zip -r build.zip scripts README.md LICENSE VERSION BUILD_INFO
 
       - uses: actions/upload-artifact@v4
         with:
@@ -47,94 +81,75 @@ jobs:
           path: build.zip
           retention-days: 30
 
+      - run: echo "### Build ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+
   deploy-dev:
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: dev
     permissions:
-      contents: write   # gh release create needs this
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
+      contents: write
+    uses: ./.github/workflows/release-stage.yml
+    with:
+      environment: dev
+      version: ${{ needs.build.outputs.version }}
+      simulate_failure: ${{ inputs.simulate_failure == 'dev' }}
 
-      - name: Release dev build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}   # no checkout, so gh needs the repo name
-          TAG: ${{ vars.BUILD_TAG }}-v${{ needs.build.outputs.version }}
-          NOTE: ${{ vars.RELEASE_NOTE }}
-        run: |
-          gh release create "$TAG" build.zip \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "$TAG" \
-            --notes "$NOTE
-
-          - Environment: dev
-          - BUILD_TAG: ${{ vars.BUILD_TAG }}
-          - Commit: $GITHUB_SHA"
-
-  # Staging and production download the same build-artifact as dev.
-  # Only the tag prefix and the note change, and those come from each environment's variables.
+  # Staging and production release the same build-artifact as dev.
   deploy-staging:
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: staging
     permissions:
       contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-
-      - name: Release staging build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ vars.BUILD_TAG }}-v${{ needs.build.outputs.version }}
-          NOTE: ${{ vars.RELEASE_NOTE }}
-        run: |
-          gh release create "$TAG" build.zip \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "$TAG" \
-            --notes "$NOTE
-
-          - Environment: staging
-          - BUILD_TAG: ${{ vars.BUILD_TAG }}
-          - Commit: $GITHUB_SHA"
+    uses: ./.github/workflows/release-stage.yml
+    with:
+      environment: staging
+      version: ${{ needs.build.outputs.version }}
+      simulate_failure: ${{ inputs.simulate_failure == 'staging' }}
 
   # Runs only after staging succeeds. The production environment has a required
-  # reviewer, so this job waits in "Waiting for review" until someone approves it.
+  # reviewer, so this waits in "Waiting for review" until someone approves it.
   deploy-production:
     needs: [build, deploy-staging]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment: production
     permissions:
       contents: write
+    uses: ./.github/workflows/release-stage.yml
+    with:
+      environment: production
+      version: ${{ needs.build.outputs.version }}
+      prerelease: false
+      simulate_failure: ${{ inputs.simulate_failure == 'production' }}
+
+  # Post the outcome on the "Release log" issue, whether production shipped or not.
+  notify:
+    needs: [build, deploy-staging, deploy-production]
+    if: always() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write    # comment on the release-log issue
+      actions: read    # read who approved the production deployment
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.build.outputs.version }}
+      STAGING: ${{ needs.deploy-staging.result }}
+      PRODUCTION: ${{ needs.deploy-production.result }}
+      ISSUE: ${{ vars.RELEASE_LOG_ISSUE }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-
-      - name: Release production build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ vars.BUILD_TAG }}-v${{ needs.build.outputs.version }}
-          NOTE: ${{ vars.RELEASE_NOTE }}
+      - name: Comment on release log
         run: |
-          gh release create "$TAG" build.zip \
-            --target "$GITHUB_SHA" \
-            --latest \
-            --title "$TAG" \
-            --notes "$NOTE
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          approval=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" \
+            --jq '[.[] | select(any(.environments[]; .name == "production"))
+                   | "\(.user.login) (\(.state)): \(.comment // "no comment")"] | join("; ")')
+          if [ "$PRODUCTION" = "success" ]; then
+            head="Released prod-v$VERSION"
+            link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/prod-v$VERSION"
+          else
+            head="Production not released for $VERSION (production: $PRODUCTION, staging: $STAGING)"
+            link="$run_url"
+          fi
+          gh issue comment "$ISSUE" --body "**$head**
 
-          - Environment: production
-          - BUILD_TAG: ${{ vars.BUILD_TAG }}
+          - Link: $link
+          - Production review: ${approval:-none}
           - Commit: $GITHUB_SHA
-          - Approved by a required reviewer before release"
+          - Run: $run_url"

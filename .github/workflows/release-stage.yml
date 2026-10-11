@@ -1,0 +1,91 @@
+name: Release stage
+
+# Called by deploy.yml once per environment (dev, staging, production).
+# One copy of the release logic means the three stages cannot drift apart.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      prerelease:
+        type: boolean
+        default: true
+      simulate_failure:
+        description: Make the smoke test fail on purpose, to demo the rollback
+        type: boolean
+        default: false
+    outputs:
+      tag:
+        value: ${{ jobs.release.outputs.tag }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The environment decides which vars this job sees, and for production
+    # it is also where the required-reviewer rule stops the job until approved.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write   # create and, on failure, delete the release
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ vars.BUILD_TAG }}-v${{ inputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Create release
+        id: release
+        env:
+          NOTE: ${{ vars.RELEASE_NOTE }}
+          FLAG: ${{ inputs.prerelease && '--prerelease' || '--latest' }}
+        run: |
+          gh release create "$TAG" build.zip \
+            --target "$GITHUB_SHA" \
+            "$FLAG" \
+            --title "$TAG" \
+            --notes "$NOTE
+
+          - Environment: ${{ inputs.environment }}
+          - Version: ${{ inputs.version }}
+          - BUILD_TAG: ${{ vars.BUILD_TAG }}
+          - Commit: $GITHUB_SHA
+          - Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # Download what we just published and check it is byte-for-byte the build we tested.
+      - name: Smoke test
+        env:
+          SIMULATE: ${{ inputs.simulate_failure }}
+        run: |
+          gh release download "$TAG" --pattern build.zip --dir published
+          expected=$(sha256sum build.zip | cut -d' ' -f1)
+          actual=$(sha256sum published/build.zip | cut -d' ' -f1)
+          echo "expected $expected"
+          echo "actual   $actual"
+          [ "$expected" = "$actual" ] || { echo "::error::Published asset does not match the build"; exit 1; }
+          unzip -tq published/build.zip
+          if [ "$SIMULATE" = "true" ]; then
+            echo "::error::Simulated smoke-test failure (workflow_dispatch input)"
+            exit 1
+          fi
+
+      # Only undo a release this job created. If "Create release" itself failed
+      # (for example the tag already existed), that release is not ours to delete.
+      - name: Roll back failed release
+        if: failure() && steps.release.outcome == 'success'
+        run: |
+          gh release delete "$TAG" --cleanup-tag --yes
+          echo "### Rolled back \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "The smoke test failed, so the release and its tag were deleted." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary
+        run: echo "### Released [\`$TAG\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG)" >> "$GITHUB_STEP_SUMMARY"
