@@ -13,14 +13,15 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
+- 2026-10-11 [`2ca778b`](https://github.com/a0966568571-bot/readme-activity-bot/commit/2ca778b7bbf2d8f147d0142a5c533ff46c7f967f) Merge pull request #6 from a0966568571-bot/deploy-staging-prod, by a0966568571-bot
+- 2026-10-11 [`622ea30`](https://github.com/a0966568571-bot/readme-activity-bot/commit/622ea302652ee5ba3b890b62b31a47b8ed14c0e6) Add staging and production deploy jobs, by a0966568571-bot
 - 2026-10-11 [`3913480`](https://github.com/a0966568571-bot/readme-activity-bot/commit/3913480b41fe292a6a1c066a56574c3a97e39cc5) Merge pull request #5 from a0966568571-bot/deploy-pipeline, by a0966568571-bot
 - 2026-10-11 [`b6bc69b`](https://github.com/a0966568571-bot/readme-activity-bot/commit/b6bc69bcb296c51ea4981d27a38f033a0503ea35) Add build and dev deploy pipeline, by a0966568571-bot
 - 2026-10-06 [`f93ad96`](https://github.com/a0966568571-bot/readme-activity-bot/commit/f93ad9699b5056c7bc1dda91260edc464fdfb9cf) Merge pull request #4 from a0966568571-bot/2-ci-guardrails, by a0966568571-bot
-- 2026-10-06 [`170421f`](https://github.com/a0966568571-bot/readme-activity-bot/commit/170421ff2f46be150bd02d3f7e0805e42676d282) Revert the schedule to once a day, by a0966568571-bot
-- 2026-10-06 [`761ab2a`](https://github.com/a0966568571-bot/readme-activity-bot/commit/761ab2ab7f0d4ee7a2401b6b51ea0e7f93852271) Write run metrics even when the run fails, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-11 [#6 Deployment pipeline: staging + production with approval](https://github.com/a0966568571-bot/readme-activity-bot/pull/6), by a0966568571-bot
 - 2026-10-11 [#5 Deployment pipeline: build + dev release](https://github.com/a0966568571-bot/readme-activity-bot/pull/5), by a0966568571-bot
 - 2026-10-06 [#4 Add CI guardrails and run reporting](https://github.com/a0966568571-bot/readme-activity-bot/pull/4), by a0966568571-bot
 - 2026-10-05 [#3 Automate README Recent Activity section](https://github.com/a0966568571-bot/readme-activity-bot/pull/3), by a0966568571-bot
