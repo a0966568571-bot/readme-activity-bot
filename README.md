@@ -13,19 +13,19 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
+- 2026-10-12 [`85a85e7`](https://github.com/a0966568571-bot/readme-activity-bot/commit/85a85e79e8b59c05cbf7487f060bd695b933fb2b) Merge pull request #10 from a0966568571-bot/fix-agent-action, by a0966568571-bot
+- 2026-10-12 [`f138916`](https://github.com/a0966568571-bot/readme-activity-bot/commit/f138916ca5032829d5f6e1e3aff0a9039ef75ff7) Use maintained base-action; the old repo installs Claude Code 1.0.88, by a0966568571-bot
 - 2026-10-12 [`4d5f5ff`](https://github.com/a0966568571-bot/readme-activity-bot/commit/4d5f5ffeca2acf3e7ad163bdfeac731e5cb154ff) Merge pull request #9 from a0966568571-bot/ai-release-notes, by a0966568571-bot
 - 2026-10-12 [`e7426f2`](https://github.com/a0966568571-bot/readme-activity-bot/commit/e7426f22feca178683bde4abe6fe4680d03c520e) Add release-notes agent job with guardrails; hide wait-timer approvals in notifications, by a0966568571-bot
 - 2026-10-11 [`a429651`](https://github.com/a0966568571-bot/readme-activity-bot/commit/a42965146661f86ba45796110be660ea5a52a6f0) Merge pull request #8 from a0966568571-bot/pipeline-automation, by a0966568571-bot
-- 2026-10-11 [`d3557c0`](https://github.com/a0966568571-bot/readme-activity-bot/commit/d3557c03e4711fdb3c3e195b61c4bb58125b692a) Add lint, test matrix, auto version, smoke test with rollback, release notifications, by a0966568571-bot
-- 2026-10-11 [`2ca778b`](https://github.com/a0966568571-bot/readme-activity-bot/commit/2ca778b7bbf2d8f147d0142a5c533ff46c7f967f) Merge pull request #6 from a0966568571-bot/deploy-staging-prod, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-12 [#10 Fix release-notes agent: use maintained base-action](https://github.com/a0966568571-bot/readme-activity-bot/pull/10), by a0966568571-bot
 - 2026-10-12 [#9 AI release-notes agent before production approval](https://github.com/a0966568571-bot/readme-activity-bot/pull/9), by a0966568571-bot
 - 2026-10-11 [#8 Pipeline automation: lint/test gate, semver auto-bump, rollback, notifications](https://github.com/a0966568571-bot/readme-activity-bot/pull/8), by a0966568571-bot
 - 2026-10-11 [#6 Deployment pipeline: staging + production with approval](https://github.com/a0966568571-bot/readme-activity-bot/pull/6), by a0966568571-bot
 - 2026-10-11 [#5 Deployment pipeline: build + dev release](https://github.com/a0966568571-bot/readme-activity-bot/pull/5), by a0966568571-bot
-- 2026-10-06 [#4 Add CI guardrails and run reporting](https://github.com/a0966568571-bot/readme-activity-bot/pull/4), by a0966568571-bot
 
 **Recently closed issues**
 
