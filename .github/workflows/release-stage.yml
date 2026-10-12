@@ -18,6 +18,10 @@ on:
         description: Make the smoke test fail on purpose, to demo the rollback
         type: boolean
         default: false
+      notes_artifact:
+        description: Name of an artifact holding release-notes.md to add to the notes
+        type: string
+        default: ""
     outputs:
       tag:
         value: ${{ jobs.release.outputs.tag }}
@@ -42,23 +46,39 @@ jobs:
         with:
           name: build-artifact
 
+      # Production only: the AI draft the reviewer read before approving.
+      # A missing artifact (agent failed) must not block the release.
+      - uses: actions/download-artifact@v4
+        if: inputs.notes_artifact != ''
+        continue-on-error: true
+        with:
+          name: ${{ inputs.notes_artifact }}
+          path: notes
+
       - name: Create release
         id: release
         env:
           NOTE: ${{ vars.RELEASE_NOTE }}
           FLAG: ${{ inputs.prerelease && '--prerelease' || '--latest' }}
         run: |
+          {
+            echo "$NOTE"
+            echo
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Version: ${{ inputs.version }}"
+            echo "- BUILD_TAG: ${{ vars.BUILD_TAG }}"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            if [ -f notes/release-notes.md ]; then
+              echo
+              cat notes/release-notes.md
+            fi
+          } > notes.md
           gh release create "$TAG" build.zip \
             --target "$GITHUB_SHA" \
             "$FLAG" \
             --title "$TAG" \
-            --notes "$NOTE
-
-          - Environment: ${{ inputs.environment }}
-          - Version: ${{ inputs.version }}
-          - BUILD_TAG: ${{ vars.BUILD_TAG }}
-          - Commit: $GITHUB_SHA
-          - Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            --notes-file notes.md
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       # Download what we just published and check it is byte-for-byte the build we tested.

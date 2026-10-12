@@ -104,10 +104,79 @@ jobs:
       version: ${{ needs.build.outputs.version }}
       simulate_failure: ${{ inputs.simulate_failure == 'staging' }}
 
+  # The release-notes agent. It reads the changes since the last prod- tag and drafts
+  # notes for the production reviewer. Guardrails:
+  # - its own environment (ai-review), so only this job can read the Claude token,
+  #   and this job cannot read anything from the production environment
+  # - contents: read only, and the checkout does not keep the GitHub token on disk
+  # - the agent may only read files and run git log/diff/show; no writes, no web
+  # - it returns JSON; our script renders it, so the agent never writes the notes file
+  # - it cannot approve anything: production still waits for a human reviewer
+  release-notes-agent:
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ai-review
+    continue-on-error: true   # if the agent fails, the reviewer still gets the commit list
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false   # no GitHub token left in .git/config for the agent to find
+
+      - name: Find changes since last production release
+        id: range
+        run: |
+          prev=$(git tag --list 'prod-v*' --sort=-v:refname | head -1)
+          range="${prev:+$prev..}$GITHUB_SHA"
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          git log --no-merges --format='%h %s' "$range" > commits.txt
+          sed -e "s|{{VERSION}}|$VERSION|" -e "s|{{PREV_TAG}}|${prev:-none}|" -e "s|{{RANGE}}|$range|" \
+            .github/agent/release-notes-prompt.md > "$RUNNER_TEMP/prompt.md"
+          echo "Range: $range ($(wc -l < commits.txt) commits)"
+
+      - name: Run release-notes agent
+        id: agent
+        uses: anthropics/claude-code-base-action@2d6abe4aa8adacaa322e24a040787cf155cf1d09 # v0.0.63
+        with:
+          prompt_file: ${{ runner.temp }}/prompt.md
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --max-turns 15
+            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git diff:*),Bash(git show:*)"
+            --disallowedTools "Write,Edit,NotebookEdit,WebFetch,WebSearch"
+            --json-schema '{"type":"object","additionalProperties":false,"required":["summary","changes","risks","reviewer_checks","suspicious_input"],"properties":{"summary":{"type":"string"},"changes":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["type","description","commits"],"properties":{"type":{"type":"string","enum":["feature","fix","ci","docs","test","chore","other"]},"description":{"type":"string"},"commits":{"type":"array","items":{"type":"string"}}}}},"risks":{"type":"array","items":{"type":"string"}},"reviewer_checks":{"type":"array","items":{"type":"string"}},"suspicious_input":{"type":"array","items":{"type":"string"}}}}'
+
+      - name: Render notes for the reviewer
+        if: always()
+        env:
+          AGENT_OUTPUT: ${{ steps.agent.outputs.structured_output }}
+        run: |
+          python3 scripts/render_release_notes.py "$VERSION" "${{ steps.range.outputs.prev }}" commits.txt release-notes.md
+          printf '%s\n' "$AGENT_OUTPUT" > agent-output.json
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Kept 90 days so the draft the reviewer saw can be compared with what shipped.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-release-notes
+          path: |
+            release-notes.md
+            agent-output.json
+            commits.txt
+          retention-days: 90
+
   # Runs only after staging succeeds. The production environment has a required
   # reviewer, so this waits in "Waiting for review" until someone approves it.
+  # The reviewer reads the agent's notes (run summary) before approving.
   deploy-production:
-    needs: [build, deploy-staging]
+    needs: [build, deploy-staging, release-notes-agent]
+    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' }}
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -116,6 +185,7 @@ jobs:
       version: ${{ needs.build.outputs.version }}
       prerelease: false
       simulate_failure: ${{ inputs.simulate_failure == 'production' }}
+      notes_artifact: ai-release-notes
 
   # Post the outcome on the "Release log" issue, whether production shipped or not.
   notify:
@@ -138,8 +208,10 @@ jobs:
         run: |
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           approval=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" \
-            --jq '[.[] | select(any(.environments[]; .name == "production"))
-                   | "\(.user.login) (\(.state)): \(.comment // "no comment")"] | join("; ")')
+            --jq '[.[] | select(.user.login != "github-actions[bot]")
+                   | select(any(.environments[]; .name == "production"))
+                   | "\(.user.login) (\(.state)): \(if (.comment // "") == "" then "no comment" else .comment end)"]
+                   | join("; ")')
           if [ "$PRODUCTION" = "success" ]; then
             head="Released prod-v$VERSION"
             link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/prod-v$VERSION"
