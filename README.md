@@ -50,9 +50,21 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 API calls retry with exponential backoff on 429/5xx and on rate-limit 403s. Settings live in repository variables (`MAX_RETRIES`, `BACKOFF_BASE`, `MAX_WAIT`). A manual run can fake failures to test this (`simulate_status`, `simulate_count`).
 
+## Deployment pipeline
+
+Every push to `main` runs [deploy.yml](.github/workflows/deploy.yml):
+
+1. `lint` (ruff) and `test` (Python 3.9 and 3.13) must pass before `build`.
+2. `build` picks the next version from `VERSION` and the existing tags, then packs `build.zip`.
+3. `deploy-dev` and `deploy-staging` publish that same zip as `dev-vX.Y.Z` and `staging-vX.Y.Z` prereleases. Each stage downloads what it published, checks the sha256, and deletes the release if the check fails.
+4. `release-notes-agent` drafts release notes with GitHub Copilot CLI (read-only git tools, `ai-review` environment).
+5. `deploy-production` waits for a required reviewer, who reads the draft first, then publishes `prod-vX.Y.Z`.
+6. `notify` comments the result on the Release log issue (#7).
+
 ## Project tracking
 
 Work is tracked on the [README Automation board](https://github.com/users/a0966568571-bot/projects/2).
 
 - #1 Automate the Recent Activity section
 - #2 CI guardrails and run reporting
+- #7 Release log (deployment pipeline)
