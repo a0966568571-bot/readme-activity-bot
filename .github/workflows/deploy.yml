@@ -166,6 +166,7 @@ jobs:
           AGENT_OUTPUT="$(cat agent-response.txt 2>/dev/null || true)" \
             python3 scripts/render_release_notes.py "$VERSION" "${{ steps.range.outputs.prev }}" commits.txt release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+          cat release-notes.md   # the run summary page only shows this after the whole run ends
 
       # Kept 90 days so the draft the reviewer saw can be compared with what shipped.
       - uses: actions/upload-artifact@v4
@@ -178,6 +179,37 @@ jobs:
             commits.txt
           retention-days: 90
           if-no-files-found: warn
+
+  # Job summaries only appear once the whole run has finished, but production is
+  # still waiting then. So post the draft on the Release log issue, where the
+  # reviewer sees it before approving. This job, not the agent, holds issues: write.
+  share-release-notes:
+    needs: [build, release-notes-agent]
+    if: ${{ !cancelled() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ai-release-notes
+
+      - name: Comment draft on release log
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ vars.RELEASE_LOG_ISSUE }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "**Waiting for production review: $VERSION** ([run]($run_url))"
+            echo
+            if [ -f release-notes.md ]; then cat release-notes.md; else echo "No AI draft was produced."; fi
+          } > comment.md
+          gh issue comment "$ISSUE" --body-file comment.md
 
   # Runs only after staging succeeds. The production environment has a required
   # reviewer, so this waits in "Waiting for review" until someone approves it.
