@@ -105,14 +105,12 @@ jobs:
       simulate_failure: ${{ inputs.simulate_failure == 'staging' }}
 
   # The release-notes agent. It reads the changes since the last prod- tag and drafts
-  # notes for the production reviewer. It runs on GitHub Models through
-  # scripts/release_notes_agent.py. Guardrails:
-  # - least privilege: contents: read and models: read. The only credential is this
-  #   job's short-lived GITHUB_TOKEN; there is no long-lived API key to leak
-  # - the model never sees the token; it can only call four read-only tools that the
-  #   script implements and checks (git_log, git_diff_stat, git_show, read_file)
-  # - its own environment (ai-review, main only) holds the model choice as a variable
-  # - it returns JSON; our script renders it, so the model never writes the notes file
+  # notes for the production reviewer, using GitHub Copilot CLI. Guardrails:
+  # - its own environment (ai-review, main only) holds COPILOT_PAT as an environment
+  #   secret: a fine-grained PAT whose only permission is "Copilot Requests"
+  # - the job token is contents: read, and the checkout does not keep it on disk
+  # - the agent may only run git log/diff/show; writing files and git push are denied
+  # - it returns JSON; our script renders it, so the agent never writes the notes file
   # - it cannot approve anything: production still waits for a human reviewer
   release-notes-agent:
     needs: [build, deploy-staging]
@@ -122,7 +120,6 @@ jobs:
     continue-on-error: true   # if the agent fails, the reviewer still gets the commit list
     permissions:
       contents: read
-      models: read   # call GitHub Models with GITHUB_TOKEN
     env:
       VERSION: ${{ needs.build.outputs.version }}
     steps:
@@ -131,31 +128,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # no GitHub token left in .git/config
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
       - name: Find changes since last production release
         id: range
         run: |
           prev=$(git tag --list 'prod-v*' --sort=-v:refname | head -1)
           range="${prev:+$prev..}$GITHUB_SHA"
           echo "prev=$prev" >> "$GITHUB_OUTPUT"
-          echo "range=$range" >> "$GITHUB_OUTPUT"
           git log --no-merges --format='%h %s' "$range" > commits.txt
+          sed -e "s|{{VERSION}}|$VERSION|" -e "s|{{PREV_TAG}}|${prev:-none}|" -e "s|{{RANGE}}|$range|" \
+            .github/agent/release-notes-prompt.md > "$RUNNER_TEMP/prompt.md"
           echo "Range: $range ($(wc -l < commits.txt) commits)"
 
-      # Each tool call is printed here and saved to agent-trace.jsonl.
       - name: Run release-notes agent
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
           MODEL: ${{ vars.AI_MODEL }}
         run: |
-          python3 scripts/release_notes_agent.py \
-            --version "$VERSION" \
-            --prev-tag "${{ steps.range.outputs.prev }}" \
-            --range "${{ steps.range.outputs.range }}"
+          copilot -p "$(cat "$RUNNER_TEMP/prompt.md")" -s --no-ask-user \
+            ${MODEL:+--model "$MODEL"} \
+            --allow-tool 'shell(git log:*)' \
+            --allow-tool 'shell(git diff:*)' \
+            --allow-tool 'shell(git show:*)' \
+            --deny-tool 'write' \
+            --deny-tool 'shell(git push:*)' \
+            | tee agent-response.txt
 
       - name: Render notes for the reviewer
         if: always()
         run: |
-          AGENT_OUTPUT="$(cat agent-output.json 2>/dev/null || true)" \
+          AGENT_OUTPUT="$(cat agent-response.txt 2>/dev/null || true)" \
             python3 scripts/render_release_notes.py "$VERSION" "${{ steps.range.outputs.prev }}" commits.txt release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -166,8 +174,7 @@ jobs:
           name: ai-release-notes
           path: |
             release-notes.md
-            agent-output.json
-            agent-trace.jsonl
+            agent-response.txt
             commits.txt
           retention-days: 90
           if-no-files-found: warn

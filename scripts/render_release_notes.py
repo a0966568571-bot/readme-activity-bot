@@ -41,11 +41,18 @@ def render(data, version, prev_tag, commits):
 
 
 def parse(raw):
-    try:
-        data = json.loads(raw) if raw else None
-    except ValueError:
+    """Read the agent's JSON. Chat models sometimes wrap it in a code fence or a
+    sentence, so fall back to the text between the first { and the last }."""
+    if not raw:
         return None
-    return data if isinstance(data, dict) else None
+    for text in (raw, raw[raw.find("{"): raw.rfind("}") + 1]):
+        try:
+            data = json.loads(text)
+        except ValueError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
 
 
 def main():

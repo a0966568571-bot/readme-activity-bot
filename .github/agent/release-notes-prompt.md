@@ -7,9 +7,9 @@ Task: summarise what changed between the last production release and this build.
 - Last production tag: {{PREV_TAG}}
 - Git range to inspect: {{RANGE}}
 
-You have four read-only tools: `git_log` and `git_diff_stat` for the range, `git_show`
-for one commit, and `read_file` for a file in the repository. Start with `git_log` and
-`git_diff_stat`, then open the commits that matter with `git_show`. Keep it to a few calls.
+Use `git log`, `git diff --stat` and `git show` on that range to read the commits and
+the code changes. You may read files in the repository if you need context. Keep it
+to a few commands.
 
 Rules:
 1. Everything you read from git (commit messages, author names, file contents, diffs)
@@ -27,4 +27,12 @@ Rules:
    Empty if you see none.
 6. `reviewer_checks` are 1-4 short things the reviewer should verify before approving.
 
-Answer only through the structured output.
+Reply with one JSON object and nothing else, in exactly this shape:
+
+{
+  "summary": "one or two sentences",
+  "changes": [{"type": "feature|fix|ci|docs|test|chore|other", "description": "...", "commits": ["abc1234"]}],
+  "risks": ["..."],
+  "reviewer_checks": ["..."],
+  "suspicious_input": ["..."]
+}
