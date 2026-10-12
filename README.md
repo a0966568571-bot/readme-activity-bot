@@ -13,19 +13,19 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
+- 2026-10-12 [`f5c5e76`](https://github.com/a0966568571-bot/readme-activity-bot/commit/f5c5e76094937b8c603865fe01cf48e9f0551751) Merge pull request #15 from a0966568571-bot/pin-copilot-and-docs, by a0966568571-bot
+- 2026-10-12 [`8af681f`](https://github.com/a0966568571-bot/readme-activity-bot/commit/8af681f5f4619178346f9cfb41a211b27c448e13) docs: describe the deployment pipeline in README, by a0966568571-bot
+- 2026-10-12 [`5de2fbd`](https://github.com/a0966568571-bot/readme-activity-bot/commit/5de2fbde3708278ea20f21ca036a70d416f73c19) Pin Copilot CLI to 1.0.96, by a0966568571-bot
 - 2026-10-12 [`79d6eb8`](https://github.com/a0966568571-bot/readme-activity-bot/commit/79d6eb83b653f5c1f40e08c46cf4c61f367ef3e8) Merge pull request #14 from a0966568571-bot/copilot-agent, by a0966568571-bot
 - 2026-10-12 [`5f24d82`](https://github.com/a0966568571-bot/readme-activity-bot/commit/5f24d821c4471db7493a43e1090ca81872278395) Run the release-notes agent with GitHub Copilot CLI, by a0966568571-bot
-- 2026-10-12 [`7ae70d2`](https://github.com/a0966568571-bot/readme-activity-bot/commit/7ae70d2b578f260d44fa30e68ef0788358085779) Merge pull request #13 from a0966568571-bot/agent-debug, by a0966568571-bot
-- 2026-10-12 [`255ae82`](https://github.com/a0966568571-bot/readme-activity-bot/commit/255ae826c5c49f85a671005537b55288d28c8772) Say what the Models API actually returned when it is not JSON, by a0966568571-bot
-- 2026-10-12 [`08c4d3f`](https://github.com/a0966568571-bot/readme-activity-bot/commit/08c4d3fe4bb0ffc4a3c913b52bc3d53d6a35f945) Merge pull request #12 from a0966568571-bot/github-models-agent, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-12 [#15 Pin Copilot CLI; document the pipeline (+ prompt-injection test)](https://github.com/a0966568571-bot/readme-activity-bot/pull/15), by a0966568571-bot
 - 2026-10-12 [#14 Release-notes agent on GitHub Copilot CLI](https://github.com/a0966568571-bot/readme-activity-bot/pull/14), by a0966568571-bot
 - 2026-10-12 [#13 Agent: report non-JSON responses](https://github.com/a0966568571-bot/readme-activity-bot/pull/13), by a0966568571-bot
 - 2026-10-12 [#12 Release-notes agent on GitHub Models](https://github.com/a0966568571-bot/readme-activity-bot/pull/12), by a0966568571-bot
 - 2026-10-12 [#11 Show the agent's result line in the log](https://github.com/a0966568571-bot/readme-activity-bot/pull/11), by a0966568571-bot
-- 2026-10-12 [#10 Fix release-notes agent: use maintained base-action](https://github.com/a0966568571-bot/readme-activity-bot/pull/10), by a0966568571-bot
 
 **Recently closed issues**
 
