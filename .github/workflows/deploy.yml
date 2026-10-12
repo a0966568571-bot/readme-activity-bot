@@ -184,8 +184,9 @@ jobs:
   # still waiting then. So post the draft on the Release log issue, where the
   # reviewer sees it before approving. This job, not the agent, holds issues: write.
   share-release-notes:
-    needs: [build, release-notes-agent]
-    if: ${{ !cancelled() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != '' }}
+    needs: [build, deploy-staging, release-notes-agent]
+    # Same condition as deploy-production: only post when production will ask for review.
+    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' && vars.RELEASE_LOG_ISSUE != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
