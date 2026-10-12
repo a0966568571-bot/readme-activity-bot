@@ -13,19 +13,19 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
+- 2026-10-12 [`7ae70d2`](https://github.com/a0966568571-bot/readme-activity-bot/commit/7ae70d2b578f260d44fa30e68ef0788358085779) Merge pull request #13 from a0966568571-bot/agent-debug, by a0966568571-bot
+- 2026-10-12 [`255ae82`](https://github.com/a0966568571-bot/readme-activity-bot/commit/255ae826c5c49f85a671005537b55288d28c8772) Say what the Models API actually returned when it is not JSON, by a0966568571-bot
 - 2026-10-12 [`08c4d3f`](https://github.com/a0966568571-bot/readme-activity-bot/commit/08c4d3fe4bb0ffc4a3c913b52bc3d53d6a35f945) Merge pull request #12 from a0966568571-bot/github-models-agent, by a0966568571-bot
 - 2026-10-12 [`38207d2`](https://github.com/a0966568571-bot/readme-activity-bot/commit/38207d264e35ffaf23d806ed75255dab61d496ff) Run the release-notes agent on GitHub Models with read-only tools, by a0966568571-bot
 - 2026-10-12 [`e161668`](https://github.com/a0966568571-bot/readme-activity-bot/commit/e161668cb1dad371c321d0186f888dbcaadb09e3) Merge pull request #11 from a0966568571-bot/agent-error-summary, by a0966568571-bot
-- 2026-10-12 [`03c6490`](https://github.com/a0966568571-bot/readme-activity-bot/commit/03c649093ba56440923a5edc5e9a93b2d90b6fde) Print the agent's final result line so failures show a reason, by a0966568571-bot
-- 2026-10-12 [`85a85e7`](https://github.com/a0966568571-bot/readme-activity-bot/commit/85a85e79e8b59c05cbf7487f060bd695b933fb2b) Merge pull request #10 from a0966568571-bot/fix-agent-action, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-12 [#13 Agent: report non-JSON responses](https://github.com/a0966568571-bot/readme-activity-bot/pull/13), by a0966568571-bot
 - 2026-10-12 [#12 Release-notes agent on GitHub Models](https://github.com/a0966568571-bot/readme-activity-bot/pull/12), by a0966568571-bot
 - 2026-10-12 [#11 Show the agent's result line in the log](https://github.com/a0966568571-bot/readme-activity-bot/pull/11), by a0966568571-bot
 - 2026-10-12 [#10 Fix release-notes agent: use maintained base-action](https://github.com/a0966568571-bot/readme-activity-bot/pull/10), by a0966568571-bot
 - 2026-10-12 [#9 AI release-notes agent before production approval](https://github.com/a0966568571-bot/readme-activity-bot/pull/9), by a0966568571-bot
-- 2026-10-11 [#8 Pipeline automation: lint/test gate, semver auto-bump, rollback, notifications](https://github.com/a0966568571-bot/readme-activity-bot/pull/8), by a0966568571-bot
 
 **Recently closed issues**
 
