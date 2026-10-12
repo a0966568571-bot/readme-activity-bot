@@ -154,6 +154,14 @@ jobs:
             --disallowedTools "Write,Edit,NotebookEdit,WebFetch,WebSearch"
             --json-schema '{"type":"object","additionalProperties":false,"required":["summary","changes","risks","reviewer_checks","suspicious_input"],"properties":{"summary":{"type":"string"},"changes":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["type","description","commits"],"properties":{"type":{"type":"string","enum":["feature","fix","ci","docs","test","chore","other"]},"description":{"type":"string"},"commits":{"type":"array","items":{"type":"string"}}}}},"risks":{"type":"array","items":{"type":"string"}},"reviewer_checks":{"type":"array","items":{"type":"string"}},"suspicious_input":{"type":"array","items":{"type":"string"}}}}'
 
+      # The action hides Claude's messages by default (they could contain tool output).
+      # Print only the final result line, so a failure shows its reason in the log.
+      - name: Show agent result
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$f" ] && jq -r '.[] | select(.type == "result") | "is_error=\(.is_error) turns=\(.num_turns) result=\(.result // "" | .[0:500])"' "$f" || echo "no execution file"
+
       - name: Render notes for the reviewer
         if: always()
         env:
