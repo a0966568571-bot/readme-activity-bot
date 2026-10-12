@@ -135,7 +135,12 @@ def call_model(token, body):
     for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
-                return json.load(resp)
+                raw = resp.read().decode(errors="replace")
+                kind = resp.headers.get("Content-Type", "")
+            try:
+                return json.loads(raw)
+            except ValueError:
+                raise RuntimeError("Models API returned non-JSON (%s): %r" % (kind, raw[:300])) from None
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503) and attempt < 2:
                 time.sleep(5 * (attempt + 1))
@@ -156,7 +161,10 @@ def run_agent(token, model, system_prompt, user_prompt, trace):
         msg = call_model(token, body)["choices"][0]["message"]
         calls = msg.get("tool_calls") or []
         if not calls:
-            data = json.loads(msg.get("content") or "")
+            try:
+                data = json.loads(msg.get("content") or "")
+            except ValueError:
+                raise RuntimeError("model answer is not JSON: %r" % (msg.get("content") or "")[:300]) from None
             trace({"turn": turn, "final": True})
             return data
         messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": calls})
