@@ -139,9 +139,12 @@ jobs:
             .github/agent/release-notes-prompt.md > "$RUNNER_TEMP/prompt.md"
           echo "Range: $range ($(wc -l < commits.txt) commits)"
 
+      # The standalone claude-code-base-action repo still installs Claude Code 1.0.88,
+      # which rejects current OAuth tokens (401). The maintained copy lives in
+      # claude-code-action/base-action. Pinned to a commit SHA, not a moving tag.
       - name: Run release-notes agent
         id: agent
-        uses: anthropics/claude-code-base-action@2d6abe4aa8adacaa322e24a040787cf155cf1d09 # v0.0.63
+        uses: anthropics/claude-code-action/base-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1 (Claude Code 2.1.296)
         with:
           prompt_file: ${{ runner.temp }}/prompt.md
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
