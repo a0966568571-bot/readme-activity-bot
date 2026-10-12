@@ -133,7 +133,7 @@ jobs:
           node-version: "22"
 
       - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+        run: npm install -g @github/copilot@1.0.96   # pinned: a new CLI release should be a reviewed change
 
       - name: Find changes since last production release
         id: range
