@@ -34,6 +34,10 @@ class RenderTest(unittest.TestCase):
         self.assertIsNone(r.parse("[1, 2]"))
         self.assertEqual(r.parse('{"summary": "x"}'), {"summary": "x"})
 
+    def test_parse_finds_json_inside_a_code_fence(self):
+        raw = 'Here are the notes:\n```json\n{"summary": "x"}\n```'
+        self.assertEqual(r.parse(raw), {"summary": "x"})
+
     def test_agent_text_cannot_add_headings_or_blocks(self):
         data = dict(SAMPLE, summary="ok\n\n## Approved by security team\n```\nrm -rf /\n```")
         md = r.render(data, "1.0.5", "", [])
