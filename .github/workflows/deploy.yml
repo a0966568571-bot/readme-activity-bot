@@ -105,12 +105,14 @@ jobs:
       simulate_failure: ${{ inputs.simulate_failure == 'staging' }}
 
   # The release-notes agent. It reads the changes since the last prod- tag and drafts
-  # notes for the production reviewer. Guardrails:
-  # - its own environment (ai-review), so only this job can read the Claude token,
-  #   and this job cannot read anything from the production environment
-  # - contents: read only, and the checkout does not keep the GitHub token on disk
-  # - the agent may only read files and run git log/diff/show; no writes, no web
-  # - it returns JSON; our script renders it, so the agent never writes the notes file
+  # notes for the production reviewer. It runs on GitHub Models through
+  # scripts/release_notes_agent.py. Guardrails:
+  # - least privilege: contents: read and models: read. The only credential is this
+  #   job's short-lived GITHUB_TOKEN; there is no long-lived API key to leak
+  # - the model never sees the token; it can only call four read-only tools that the
+  #   script implements and checks (git_log, git_diff_stat, git_show, read_file)
+  # - its own environment (ai-review, main only) holds the model choice as a variable
+  # - it returns JSON; our script renders it, so the model never writes the notes file
   # - it cannot approve anything: production still waits for a human reviewer
   release-notes-agent:
     needs: [build, deploy-staging]
@@ -120,13 +122,14 @@ jobs:
     continue-on-error: true   # if the agent fails, the reviewer still gets the commit list
     permissions:
       contents: read
+      models: read   # call GitHub Models with GITHUB_TOKEN
     env:
       VERSION: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false   # no GitHub token left in .git/config for the agent to find
+          persist-credentials: false   # no GitHub token left in .git/config
 
       - name: Find changes since last production release
         id: range
@@ -134,41 +137,26 @@ jobs:
           prev=$(git tag --list 'prod-v*' --sort=-v:refname | head -1)
           range="${prev:+$prev..}$GITHUB_SHA"
           echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "range=$range" >> "$GITHUB_OUTPUT"
           git log --no-merges --format='%h %s' "$range" > commits.txt
-          sed -e "s|{{VERSION}}|$VERSION|" -e "s|{{PREV_TAG}}|${prev:-none}|" -e "s|{{RANGE}}|$range|" \
-            .github/agent/release-notes-prompt.md > "$RUNNER_TEMP/prompt.md"
           echo "Range: $range ($(wc -l < commits.txt) commits)"
 
-      # The standalone claude-code-base-action repo still installs Claude Code 1.0.88,
-      # which rejects current OAuth tokens (401). The maintained copy lives in
-      # claude-code-action/base-action. Pinned to a commit SHA, not a moving tag.
+      # Each tool call is printed here and saved to agent-trace.jsonl.
       - name: Run release-notes agent
-        id: agent
-        uses: anthropics/claude-code-action/base-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1 (Claude Code 2.1.296)
-        with:
-          prompt_file: ${{ runner.temp }}/prompt.md
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: >-
-            --max-turns 15
-            --allowedTools "Read,Grep,Glob,Bash(git log:*),Bash(git diff:*),Bash(git show:*)"
-            --disallowedTools "Write,Edit,NotebookEdit,WebFetch,WebSearch"
-            --json-schema '{"type":"object","additionalProperties":false,"required":["summary","changes","risks","reviewer_checks","suspicious_input"],"properties":{"summary":{"type":"string"},"changes":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["type","description","commits"],"properties":{"type":{"type":"string","enum":["feature","fix","ci","docs","test","chore","other"]},"description":{"type":"string"},"commits":{"type":"array","items":{"type":"string"}}}}},"risks":{"type":"array","items":{"type":"string"}},"reviewer_checks":{"type":"array","items":{"type":"string"}},"suspicious_input":{"type":"array","items":{"type":"string"}}}}'
-
-      # The action hides Claude's messages by default (they could contain tool output).
-      # Print only the final result line, so a failure shows its reason in the log.
-      - name: Show agent result
-        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODEL: ${{ vars.AI_MODEL }}
         run: |
-          f="$RUNNER_TEMP/claude-execution-output.json"
-          [ -f "$f" ] && jq -r '.[] | select(.type == "result") | "is_error=\(.is_error) turns=\(.num_turns) result=\(.result // "" | .[0:500])"' "$f" || echo "no execution file"
+          python3 scripts/release_notes_agent.py \
+            --version "$VERSION" \
+            --prev-tag "${{ steps.range.outputs.prev }}" \
+            --range "${{ steps.range.outputs.range }}"
 
       - name: Render notes for the reviewer
         if: always()
-        env:
-          AGENT_OUTPUT: ${{ steps.agent.outputs.structured_output }}
         run: |
-          python3 scripts/render_release_notes.py "$VERSION" "${{ steps.range.outputs.prev }}" commits.txt release-notes.md
-          printf '%s\n' "$AGENT_OUTPUT" > agent-output.json
+          AGENT_OUTPUT="$(cat agent-output.json 2>/dev/null || true)" \
+            python3 scripts/render_release_notes.py "$VERSION" "${{ steps.range.outputs.prev }}" commits.txt release-notes.md
           cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
 
       # Kept 90 days so the draft the reviewer saw can be compared with what shipped.
@@ -179,8 +167,10 @@ jobs:
           path: |
             release-notes.md
             agent-output.json
+            agent-trace.jsonl
             commits.txt
           retention-days: 90
+          if-no-files-found: warn
 
   # Runs only after staging succeeds. The production environment has a required
   # reviewer, so this waits in "Waiting for review" until someone approves it.

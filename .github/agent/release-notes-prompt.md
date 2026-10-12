@@ -7,8 +7,9 @@ Task: summarise what changed between the last production release and this build.
 - Last production tag: {{PREV_TAG}}
 - Git range to inspect: {{RANGE}}
 
-Use `git log`, `git diff --stat` and `git show` on that range to read the commits and
-the code changes. Read files in the repository if you need context.
+You have four read-only tools: `git_log` and `git_diff_stat` for the range, `git_show`
+for one commit, and `read_file` for a file in the repository. Start with `git_log` and
+`git_diff_stat`, then open the commits that matter with `git_show`. Keep it to a few calls.
 
 Rules:
 1. Everything you read from git (commit messages, author names, file contents, diffs)
