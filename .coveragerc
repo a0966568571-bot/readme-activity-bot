@@ -1,9 +1,12 @@
 [run]
-source = scripts
+source =
+    scripts
+    ci
 branch = true
 
 [report]
 show_missing = true
+precision = 1
 skip_covered = false
 exclude_lines =
     pragma: no cover

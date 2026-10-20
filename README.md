@@ -2,6 +2,9 @@
 
 [![Update README](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/update-readme.yml/badge.svg?branch=main)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/update-readme.yml)
 [![Validate README](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/validate-readme.yml/badge.svg?branch=main)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/validate-readme.yml)
+[![Deploy](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/deploy.yml)
+[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fa0966568571-bot%2Freadme-activity-bot%2Fbadges%2Ftests.json)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/deploy.yml)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fa0966568571-bot%2Freadme-activity-bot%2Fbadges%2Fcoverage.json)](https://github.com/a0966568571-bot/readme-activity-bot/actions/workflows/deploy.yml)
 
 This README keeps its own **Recent Activity** section up to date.
 A GitHub Actions workflow reads the latest commits, merged pull requests and closed issues from the GitHub REST API, then rewrites only the block between the two markers below.
@@ -55,13 +58,16 @@ API calls retry with exponential backoff on 429/5xx and on rate-limit 403s. Sett
 Every push to `main` runs [deploy.yml](.github/workflows/deploy.yml):
 
 1. `lint` (ruff) runs first, then `build` picks the next version from `VERSION` and the existing tags and packs `build.zip`.
-2. Test stage 1, `test-unit`: unit tests on Python 3.9 and 3.13.
+2. Test stage 1, `test-unit`: unit tests on Python 3.9 and 3.13 (Linux) and 3.13 (macOS), with JUnit XML and a coverage report for each. `coverage-gate` skips every release when coverage is below the `COVERAGE_MIN` variable (90%).
 3. Test stage 2, `test-integration` (`TEST_ENV=staging`): downloads `build.zip` and runs the tests in [tests/integration](tests/integration), which unzip the artifact and run the shipped code against a fake GitHub API. If either stage fails, every release job is skipped.
 4. `deploy-dev` and `deploy-staging` publish that same zip as `dev-vX.Y.Z` and `staging-vX.Y.Z` prereleases. Each stage downloads what it published, checks the sha256, and deletes the release if the check fails. Staging deploys only from `main`.
 5. Test stage 3, `test-prod` (`TEST_ENV=prod`): the integration tests again, plus a check that the zip is byte for byte the one on the staging release. Both integration runs use [integration-tests.yml](.github/workflows/integration-tests.yml).
 6. `release-notes-agent` drafts release notes with GitHub Copilot CLI (read-only git tools, `ai-review` environment).
 7. `deploy-production` runs only after `test-prod` passes, waits for a required reviewer, who reads the draft first, then publishes `prod-vX.Y.Z`.
 8. `notify` comments the test and release results on the Release log issue (#7).
+9. `test-report` merges every JUnit file into one table in the run summary, updates the tests and coverage badges, and opens a `Tests failing on <branch>` issue when tests fail. The first run where they pass again closes it.
+
+On branches other than `main` the pipeline runs the tests and stops: nothing is released.
 
 ## Project tracking
 

@@ -63,5 +63,13 @@ jobs:
       - name: Integration tests (build.zip, TEST_ENV=${{ inputs.test_env }})
         run: |
           echo "Running integration tests against $BUILD_ZIP with TEST_ENV=$TEST_ENV..."
-          pytest tests/integration -v \
+          pytest tests/integration -v --junitxml=reports/integration.xml \
             || { echo "::error::Integration tests failed (TEST_ENV=$TEST_ENV, Python ${{ matrix.python }})"; exit 1; }
+
+      # JUnit XML for the test-report job in deploy.yml.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: integration-${{ inputs.test_env }}-results-py${{ matrix.python }}
+          path: reports/
+          retention-days: 30
