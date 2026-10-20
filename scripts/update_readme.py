@@ -214,7 +214,7 @@ def collect(repo, token, cache, cfg, metrics):
 
 
 def _esc(s):
-    return s.replace("<", "&lt;").replace("[", "\\[").replace("]", "\\]")
+    return s.replace("[", "\\[").replace("]", "\\]")
 
 
 def _who(c):
