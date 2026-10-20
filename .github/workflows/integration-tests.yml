@@ -1,0 +1,67 @@
+name: Integration tests
+
+# Called by deploy.yml twice, with the same tests and a different TEST_ENV:
+#   test-integration  TEST_ENV=staging  before anything is released
+#   test-prod         TEST_ENV=prod     after staging, before production review.
+#                     Also downloads the staging release and requires the same bytes.
+on:
+  workflow_call:
+    inputs:
+      test_env:
+        type: string
+        required: true
+      staging_tag:
+        description: prod only. The staging release whose build.zip must match ours.
+        type: string
+        default: ""
+      simulate_mismatch:
+        description: Change one byte of the downloaded staging zip, to demo the prod gate
+        type: boolean
+        default: false
+
+jobs:
+  integration:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    env:
+      TEST_ENV: ${{ inputs.test_env }}
+      BUILD_ZIP: artifact/build.zip
+    steps:
+      - uses: actions/checkout@v4   # the tests live in the repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-test.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: artifact
+
+      - name: Download the staging release
+        if: inputs.staging_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.staging_tag }}
+        run: |
+          gh release download "$TAG" --pattern build.zip --dir staging
+          echo "STAGING_ZIP=staging/build.zip" >> "$GITHUB_ENV"
+          sha256sum "$BUILD_ZIP" staging/build.zip
+
+      - name: Simulate a changed staging zip (demo)
+        if: inputs.simulate_mismatch && inputs.staging_tag != ''
+        run: |
+          echo "::warning::Demo: appending one byte to the downloaded staging zip"
+          printf 'x' >> staging/build.zip
+
+      - name: Integration tests (build.zip, TEST_ENV=${{ inputs.test_env }})
+        run: |
+          echo "Running integration tests against $BUILD_ZIP with TEST_ENV=$TEST_ENV..."
+          pytest tests/integration -v \
+            || { echo "::error::Integration tests failed (TEST_ENV=$TEST_ENV, Python ${{ matrix.python }})"; exit 1; }
