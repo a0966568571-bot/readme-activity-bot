@@ -71,16 +71,21 @@ jobs:
 
       - run: echo "### Build ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # Test stage 1: unit tests on the source, on every Python in the matrix.
+  # Test stage 1: unit tests on the source. Python 3.9 and 3.13 on Linux, plus 3.13
+  # on macOS. Every run uploads its JUnit XML and coverage report.
   test-unit:
-    name: unit tests (Python ${{ matrix.python }})
+    name: unit tests (${{ matrix.os }}, Python ${{ matrix.python }})
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
-      fail-fast: false   # finish both Pythons, so the log shows every failure
+      fail-fast: false   # finish every run, so the log shows every failure
       matrix:
+        os: [ubuntu-latest]
         python: ["3.9", "3.13"]
+        include:
+          - os: macos-latest
+            python: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -89,9 +94,58 @@ jobs:
       - run: pip install -r requirements-test.txt
       - name: Unit tests
         run: |
-          echo "Running unit tests on Python ${{ matrix.python }}..."
-          pytest tests --ignore=tests/integration -v \
-            || { echo "::error::Unit tests failed on Python ${{ matrix.python }}"; exit 1; }
+          echo "Running unit tests on ${{ matrix.os }}, Python ${{ matrix.python }}..."
+          pytest tests --ignore=tests/integration -v --junitxml=reports/unit.xml \
+            --cov --cov-report=term --cov-report=xml:reports/coverage.xml --cov-report=html:reports/htmlcov \
+            || { echo "::error::Unit tests failed on ${{ matrix.os }}, Python ${{ matrix.python }}"; exit 1; }
+      - name: Coverage numbers
+        if: ${{ !cancelled() }}
+        run: |
+          coverage report --format=total > reports/coverage-total.txt
+          coverage report --format=markdown > reports/coverage.md
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: unit-results-${{ matrix.os }}-py${{ matrix.python }}
+          path: reports/
+          retention-days: 30
+
+  # Coverage gate. Below vars.COVERAGE_MIN (default 90) the releases are skipped:
+  # the run stays green, but nothing ships until tests are added.
+  coverage-gate:
+    needs: test-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      percent: ${{ steps.gate.outputs.percent }}
+      ok: ${{ steps.gate.outputs.ok }}
+    env:
+      MIN: ${{ vars.COVERAGE_MIN || '90' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unit-results-ubuntu-latest-py3.13
+          path: reports
+      - name: Compare coverage with the minimum
+        id: gate
+        run: |
+          pct=$(cat reports/coverage-total.txt)
+          ok=$(python3 -c 'import sys; print("true" if float(sys.argv[1]) >= float(sys.argv[2]) else "false")' "$pct" "$MIN")
+          echo "percent=$pct" >> "$GITHUB_OUTPUT"
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "Coverage $pct%, minimum $MIN%, releases allowed: $ok"
+          { echo "### Coverage $pct% (minimum $MIN%)"; echo; cat reports/coverage.md; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ok" != "true" ]; then
+            echo "::warning::Coverage $pct% is below the $MIN% minimum. Releases will be skipped."
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            reports/htmlcov
+            reports/coverage.xml
+            reports/coverage.md
+          retention-days: 30
 
   # Test stage 2: integration tests. They unzip build.zip and run the code that will ship.
   test-integration:
@@ -100,9 +154,12 @@ jobs:
     with:
       test_env: staging
 
-  # Releases wait for both test stages. If any test fails, these jobs are skipped.
+  # Releases wait for both test stages and the coverage gate. If any test fails,
+  # or coverage is too low, these jobs are skipped. Only main releases: on other
+  # branches the pipeline stops after the tests.
   deploy-dev:
-    needs: [build, test-unit, test-integration]
+    needs: [build, test-unit, test-integration, coverage-gate]
+    if: needs.coverage-gate.outputs.ok == 'true' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -113,7 +170,8 @@ jobs:
 
   # Staging and production release the same build-artifact as dev.
   deploy-staging:
-    needs: [build, test-unit, test-integration]
+    needs: [build, test-unit, test-integration, coverage-gate]
+    if: needs.coverage-gate.outputs.ok == 'true' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -258,10 +316,92 @@ jobs:
       simulate_failure: ${{ inputs.simulate_failure == 'production' }}
       notes_artifact: ai-release-notes
 
+  # One report for all test jobs: a table in the run summary, the README badges
+  # (main only), and a "Tests failing on <branch>" issue that is opened when tests
+  # fail and closed by the first run where they pass again.
+  test-report:
+    needs: [build, test-unit, coverage-gate, test-integration, test-prod]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write   # push badge files to the badges branch
+      issues: write     # open, comment on or close the test-failure issue
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      UNIT: ${{ needs.test-unit.result }}
+      INTEGRATION: ${{ needs.test-integration.result }}
+      PROD_TESTS: ${{ needs.test-prod.result }}
+      COVERAGE: ${{ needs.coverage-gate.outputs.percent }}
+      COVERAGE_OK: ${{ needs.coverage-gate.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-results-*"
+          path: results
+
+      - name: Test report
+        run: |
+          python3 ci/junit_summary.py results --json totals.json --badge-dir badges | tee report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or close the test-failure issue
+        run: |
+          title="Tests failing on $GITHUB_REF_NAME"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          gh label create test-failure --color d73a4a --description "Opened by the pipeline when tests fail" --force
+          number=$(gh issue list --state open --label test-failure --limit 100 --json number,title \
+            | jq -r --arg t "$title" 'map(select(.title == $t)) | .[0].number // empty')
+          failed=false
+          for r in "$UNIT" "$INTEGRATION" "$PROD_TESTS"; do
+            if [ "$r" = "failure" ]; then failed=true; fi
+          done
+          if [ "$failed" = "true" ]; then
+            {
+              echo "Tests failed on \`$GITHUB_REF_NAME\` at $GITHUB_SHA."
+              echo
+              echo "- Run: $run_url"
+              echo "- Stages: unit $UNIT, integration (staging) $INTEGRATION, integration (prod) $PROD_TESTS"
+              echo
+              cat report.md
+            } > body.md
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --body-file body.md
+            else
+              gh issue create --title "$title" --label test-failure --body-file body.md
+            fi
+          elif [ -n "$number" ] && [ "$UNIT" = "success" ] && [ "$INTEGRATION" = "success" ]; then
+            gh issue close "$number" --comment "Tests pass again on \`$GITHUB_REF_NAME\` at $GITHUB_SHA: $run_url"
+          else
+            echo "Nothing to open or close."
+          fi
+
+      # shields.io reads these JSON files from the badges branch (one commit, force-pushed).
+      - name: Publish badges
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [ "$COVERAGE_OK" = "true" ]; then color=brightgreen; elif [ -n "$COVERAGE" ]; then color=red; else color=lightgrey; fi
+          message="${COVERAGE:+$COVERAGE%}"
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s","color":"%s"}\n' \
+            "${message:-unknown}" "$color" > badges/coverage.json
+          cat badges/*.json
+          cd badges
+          git init -q -b badges
+          git add .
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Badges for $GITHUB_SHA"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
+
   # Post the outcome on the "Release log" issue, whether production shipped or not.
   notify:
-    needs: [build, test-unit, test-integration, deploy-staging, test-prod, deploy-production]
-    if: always() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != ''
+    needs: [build, test-unit, coverage-gate, test-integration, deploy-staging, test-prod, deploy-production]
+    if: always() && needs.build.result == 'success' && github.ref == 'refs/heads/main' && vars.RELEASE_LOG_ISSUE != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -274,6 +414,9 @@ jobs:
       UNIT: ${{ needs.test-unit.result }}
       INTEGRATION: ${{ needs.test-integration.result }}
       PROD_TESTS: ${{ needs.test-prod.result }}
+      COVERAGE: ${{ needs.coverage-gate.outputs.percent }}
+      COVERAGE_OK: ${{ needs.coverage-gate.outputs.ok }}
+      COVERAGE_MIN: ${{ vars.COVERAGE_MIN || '90' }}
       STAGING: ${{ needs.deploy-staging.result }}
       PRODUCTION: ${{ needs.deploy-production.result }}
       ISSUE: ${{ vars.RELEASE_LOG_ISSUE }}
@@ -286,9 +429,12 @@ jobs:
                    | select(any(.environments[]; .name == "production"))
                    | "\(.user.login) (\(.state)): \(if (.comment // "") == "" then "no comment" else .comment end)"]
                    | join("; ")')
-          tests="unit $UNIT, integration (staging) $INTEGRATION, integration (prod) $PROD_TESTS"
+          tests="unit $UNIT, integration (staging) $INTEGRATION, integration (prod) $PROD_TESTS, coverage ${COVERAGE:-?}%"
           if [ "$UNIT" != "success" ] || [ "$INTEGRATION" != "success" ]; then
             head="Tests failed for $VERSION: nothing was released"
+            link="$run_url"
+          elif [ "$COVERAGE_OK" != "true" ]; then
+            head="Coverage ${COVERAGE}% is below the ${COVERAGE_MIN}% minimum for $VERSION: nothing was released"
             link="$run_url"
           elif [ "$PRODUCTION" = "success" ]; then
             head="Released prod-v$VERSION"
