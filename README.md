@@ -13,19 +13,19 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Latest commits**
 
+- 2026-10-20 [`a07113a`](https://github.com/a0966568571-bot/readme-activity-bot/commit/a07113a9cba1d2e1eecfd02c915430d2f666b006) Merge pull request #19 from a0966568571-bot/e-test-stages, by a0966568571-bot
+- 2026-10-20 [`6d5cddb`](https://github.com/a0966568571-bot/readme-activity-bot/commit/6d5cddb5618d53ad6342957da696e1da84cda7c9) Split the test gate into unit, integration and prod stages, by a0966568571-bot
 - 2026-10-20 [`21ac27a`](https://github.com/a0966568571-bot/readme-activity-bot/commit/21ac27a7576aa968ccf44982357f0e8991a2850e) Merge pull request #18 from a0966568571-bot/test-gates, by a0966568571-bot
 - 2026-10-20 [`0e00ce0`](https://github.com/a0966568571-bot/readme-activity-bot/commit/0e00ce05ee62f16d069c7e17645400b0ad3b8627) Add a test gate between build and release, by a0966568571-bot
 - 2026-10-12 [`b4bbf64`](https://github.com/a0966568571-bot/readme-activity-bot/commit/b4bbf64b23066d4b1287ebf12772f5d7ba8398d6) Merge pull request #17: post AI draft only when production waits \[skip ci\], by a0966568571-bot
-- 2026-10-12 [`a525608`](https://github.com/a0966568571-bot/readme-activity-bot/commit/a525608b1e72db6a0d38ff84d492eef2ac32873c) Only post the AI draft when production will wait for review, by a0966568571-bot
-- 2026-10-12 [`b1a96c2`](https://github.com/a0966568571-bot/readme-activity-bot/commit/b1a96c2e17dceebfc3d9d5203cf5c47124e77314) Merge pull request #16 from a0966568571-bot/notes-visible-before-approval, by a0966568571-bot
 
 **Recently merged pull requests**
 
+- 2026-10-20 [#19 Separate test stages with TEST_ENV gates before staging and production](https://github.com/a0966568571-bot/readme-activity-bot/pull/19), by a0966568571-bot
 - 2026-10-20 [#18 Test gate between build and release](https://github.com/a0966568571-bot/readme-activity-bot/pull/18), by a0966568571-bot
 - 2026-10-12 [#17 Post the AI draft only when production will ask for review](https://github.com/a0966568571-bot/readme-activity-bot/pull/17), by a0966568571-bot
 - 2026-10-12 [#16 Show the AI draft before the production approval](https://github.com/a0966568571-bot/readme-activity-bot/pull/16), by a0966568571-bot
 - 2026-10-12 [#15 Pin Copilot CLI; document the pipeline (+ prompt-injection test)](https://github.com/a0966568571-bot/readme-activity-bot/pull/15), by a0966568571-bot
-- 2026-10-12 [#14 Release-notes agent on GitHub Copilot CLI](https://github.com/a0966568571-bot/readme-activity-bot/pull/14), by a0966568571-bot
 
 **Recently closed issues**
 
