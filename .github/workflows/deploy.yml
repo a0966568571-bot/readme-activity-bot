@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       simulate_failure:
-        description: Make one stage's smoke test fail, to demo the rollback
+        description: Make one stage fail on purpose (smoke test rollback, or the prod test gate)
         type: choice
-        options: [none, dev, staging, production]
+        options: [none, dev, staging, prod-tests, production]
         default: none
 
 # Default for every job: read only. A job that needs more asks for it itself.
@@ -71,11 +71,9 @@ jobs:
 
       - run: echo "### Build ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # Test gate: nothing is released unless this passes on every Python in the matrix.
-  # Unit tests check the source; integration tests unzip build.zip and run the code
-  # that will actually ship.
-  test:
-    name: test (Python ${{ matrix.python }})
+  # Test stage 1: unit tests on the source, on every Python in the matrix.
+  test-unit:
+    name: unit tests (Python ${{ matrix.python }})
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -83,38 +81,28 @@ jobs:
       fail-fast: false   # finish both Pythons, so the log shows every failure
       matrix:
         python: ["3.9", "3.13"]
-    env:
-      TEST_ENV: staging
     steps:
-      - uses: actions/checkout@v4   # the tests live in the repo
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements-test.txt
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifact
-          path: artifact
-
       - name: Unit tests
         run: |
           echo "Running unit tests on Python ${{ matrix.python }}..."
           pytest tests --ignore=tests/integration -v \
             || { echo "::error::Unit tests failed on Python ${{ matrix.python }}"; exit 1; }
 
-      - name: Integration tests (build.zip, TEST_ENV=${{ env.TEST_ENV }})
-        if: ${{ !cancelled() }}   # also run when unit tests failed, so one run shows both
-        env:
-          BUILD_ZIP: artifact/build.zip
-        run: |
-          echo "Running integration tests against $BUILD_ZIP..."
-          pytest tests/integration -v \
-            || { echo "::error::Integration tests failed on Python ${{ matrix.python }}"; exit 1; }
+  # Test stage 2: integration tests. They unzip build.zip and run the code that will ship.
+  test-integration:
+    needs: [build, test-unit]
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      test_env: staging
 
-  # Releases wait for the test gate. If any test fails, these jobs are skipped.
+  # Releases wait for both test stages. If any test fails, these jobs are skipped.
   deploy-dev:
-    needs: [build, test]
+    needs: [build, test-unit, test-integration]
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -125,7 +113,7 @@ jobs:
 
   # Staging and production release the same build-artifact as dev.
   deploy-staging:
-    needs: [build, test]
+    needs: [build, test-unit, test-integration]
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -133,6 +121,18 @@ jobs:
       environment: staging
       version: ${{ needs.build.outputs.version }}
       simulate_failure: ${{ inputs.simulate_failure == 'staging' }}
+
+  # Test stage 3, the gate before production: the same integration tests with
+  # TEST_ENV=prod, which also downloads the staging release and requires our zip
+  # to be byte for byte the one staging shipped. Production review is only
+  # requested after this passes.
+  test-prod:
+    needs: [build, deploy-staging]
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      test_env: prod
+      staging_tag: ${{ needs.deploy-staging.outputs.tag }}
+      simulate_mismatch: ${{ inputs.simulate_failure == 'prod-tests' }}
 
   # The release-notes agent. It reads the changes since the last prod- tag and drafts
   # notes for the production reviewer, using GitHub Copilot CLI. Guardrails:
@@ -214,9 +214,9 @@ jobs:
   # still waiting then. So post the draft on the Release log issue, where the
   # reviewer sees it before approving. This job, not the agent, holds issues: write.
   share-release-notes:
-    needs: [build, deploy-staging, release-notes-agent]
+    needs: [build, deploy-staging, test-prod, release-notes-agent]
     # Same condition as deploy-production: only post when production will ask for review.
-    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' && vars.RELEASE_LOG_ISSUE != '' }}
+    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' && needs.test-prod.result == 'success' && vars.RELEASE_LOG_ISSUE != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -242,12 +242,12 @@ jobs:
           } > comment.md
           gh issue comment "$ISSUE" --body-file comment.md
 
-  # Runs only after staging succeeds. The production environment has a required
+  # Runs only after staging and the prod tests succeed. The production environment has a required
   # reviewer, so this waits in "Waiting for review" until someone approves it.
   # The reviewer reads the agent's notes (run summary) before approving.
   deploy-production:
-    needs: [build, deploy-staging, release-notes-agent]
-    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' }}
+    needs: [build, deploy-staging, test-prod, release-notes-agent]
+    if: ${{ !cancelled() && needs.deploy-staging.result == 'success' && needs.test-prod.result == 'success' }}
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -260,7 +260,7 @@ jobs:
 
   # Post the outcome on the "Release log" issue, whether production shipped or not.
   notify:
-    needs: [build, test, deploy-staging, deploy-production]
+    needs: [build, test-unit, test-integration, deploy-staging, test-prod, deploy-production]
     if: always() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -271,7 +271,9 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.build.outputs.version }}
-      TESTS: ${{ needs.test.result }}
+      UNIT: ${{ needs.test-unit.result }}
+      INTEGRATION: ${{ needs.test-integration.result }}
+      PROD_TESTS: ${{ needs.test-prod.result }}
       STAGING: ${{ needs.deploy-staging.result }}
       PRODUCTION: ${{ needs.deploy-production.result }}
       ISSUE: ${{ vars.RELEASE_LOG_ISSUE }}
@@ -284,20 +286,21 @@ jobs:
                    | select(any(.environments[]; .name == "production"))
                    | "\(.user.login) (\(.state)): \(if (.comment // "") == "" then "no comment" else .comment end)"]
                    | join("; ")')
-          if [ "$TESTS" != "success" ]; then
-            head="Tests $TESTS for $VERSION: nothing was released"
+          tests="unit $UNIT, integration (staging) $INTEGRATION, integration (prod) $PROD_TESTS"
+          if [ "$UNIT" != "success" ] || [ "$INTEGRATION" != "success" ]; then
+            head="Tests failed for $VERSION: nothing was released"
             link="$run_url"
           elif [ "$PRODUCTION" = "success" ]; then
             head="Released prod-v$VERSION"
             link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/prod-v$VERSION"
           else
-            head="Production not released for $VERSION (production: $PRODUCTION, staging: $STAGING)"
+            head="Production not released for $VERSION (production: $PRODUCTION, prod tests: $PROD_TESTS, staging: $STAGING)"
             link="$run_url"
           fi
           gh issue comment "$ISSUE" --body "**$head**
 
           - Link: $link
-          - Tests: $TESTS
+          - Tests: $tests
           - Production review: ${approval:-none}
           - Commit: $GITHUB_SHA
           - Run: $run_url"

@@ -55,11 +55,13 @@ API calls retry with exponential backoff on 429/5xx and on rate-limit 403s. Sett
 Every push to `main` runs [deploy.yml](.github/workflows/deploy.yml):
 
 1. `lint` (ruff) runs first, then `build` picks the next version from `VERSION` and the existing tags and packs `build.zip`.
-2. `test` is the gate (Python 3.9 and 3.13). It downloads `build.zip`, runs the unit tests, then the integration tests in [tests/integration](tests/integration), which unzip the artifact and run the shipped code against a fake GitHub API. If any test fails, every release job is skipped.
-3. `deploy-dev` and `deploy-staging` publish that same zip as `dev-vX.Y.Z` and `staging-vX.Y.Z` prereleases. Each stage downloads what it published, checks the sha256, and deletes the release if the check fails.
-4. `release-notes-agent` drafts release notes with GitHub Copilot CLI (read-only git tools, `ai-review` environment).
-5. `deploy-production` waits for a required reviewer, who reads the draft first, then publishes `prod-vX.Y.Z`.
-6. `notify` comments the result on the Release log issue (#7).
+2. Test stage 1, `test-unit`: unit tests on Python 3.9 and 3.13.
+3. Test stage 2, `test-integration` (`TEST_ENV=staging`): downloads `build.zip` and runs the tests in [tests/integration](tests/integration), which unzip the artifact and run the shipped code against a fake GitHub API. If either stage fails, every release job is skipped.
+4. `deploy-dev` and `deploy-staging` publish that same zip as `dev-vX.Y.Z` and `staging-vX.Y.Z` prereleases. Each stage downloads what it published, checks the sha256, and deletes the release if the check fails. Staging deploys only from `main`.
+5. Test stage 3, `test-prod` (`TEST_ENV=prod`): the integration tests again, plus a check that the zip is byte for byte the one on the staging release. Both integration runs use [integration-tests.yml](.github/workflows/integration-tests.yml).
+6. `release-notes-agent` drafts release notes with GitHub Copilot CLI (read-only git tools, `ai-review` environment).
+7. `deploy-production` runs only after `test-prod` passes, waits for a required reviewer, who reads the draft first, then publishes `prod-vX.Y.Z`.
+8. `notify` comments the test and release results on the Release log issue (#7).
 
 ## Project tracking
 
