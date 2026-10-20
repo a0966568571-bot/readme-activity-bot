@@ -54,8 +54,8 @@ API calls retry with exponential backoff on 429/5xx and on rate-limit 403s. Sett
 
 Every push to `main` runs [deploy.yml](.github/workflows/deploy.yml):
 
-1. `lint` (ruff) and `test` (Python 3.9 and 3.13) must pass before `build`.
-2. `build` picks the next version from `VERSION` and the existing tags, then packs `build.zip`.
+1. `lint` (ruff) runs first, then `build` picks the next version from `VERSION` and the existing tags and packs `build.zip`.
+2. `test` is the gate (Python 3.9 and 3.13). It downloads `build.zip`, runs the unit tests, then the integration tests in [tests/integration](tests/integration), which unzip the artifact and run the shipped code against a fake GitHub API. If any test fails, every release job is skipped.
 3. `deploy-dev` and `deploy-staging` publish that same zip as `dev-vX.Y.Z` and `staging-vX.Y.Z` prereleases. Each stage downloads what it published, checks the sha256, and deletes the release if the check fails.
 4. `release-notes-agent` drafts release notes with GitHub Copilot CLI (read-only git tools, `ai-review` environment).
 5. `deploy-production` waits for a required reviewer, who reads the draft first, then publishes `prod-vX.Y.Z`.

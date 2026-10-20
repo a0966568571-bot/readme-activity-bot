@@ -33,23 +33,8 @@ jobs:
       - run: pip install ruff==0.17.0
       - run: ruff check scripts tests
 
-  test:
-    name: test (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.9", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - run: python -m unittest discover -s tests -v
-
   build:
-    needs: [lint, test]
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -68,12 +53,15 @@ jobs:
         id: version
         run: python scripts/next_version.py
 
+      # compileall is only a syntax check. Its __pycache__ is left out of the zip:
+      # the integration tests found .pyc files for Python 3.13 shipping in every release.
       - name: Build
         run: |
           python -m compileall -q scripts
           printf 'version=%s\ncommit=%s\nrun=%s\n' \
             "${{ steps.version.outputs.version }}" "$GITHUB_SHA" "$GITHUB_RUN_ID" > BUILD_INFO
-          zip -r build.zip scripts README.md LICENSE VERSION BUILD_INFO
+          zip -r build.zip scripts README.md LICENSE VERSION BUILD_INFO -x '*__pycache__*'
+          unzip -l build.zip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -83,8 +71,50 @@ jobs:
 
       - run: echo "### Build ${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
-  deploy-dev:
+  # Test gate: nothing is released unless this passes on every Python in the matrix.
+  # Unit tests check the source; integration tests unzip build.zip and run the code
+  # that will actually ship.
+  test:
+    name: test (Python ${{ matrix.python }})
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false   # finish both Pythons, so the log shows every failure
+      matrix:
+        python: ["3.9", "3.13"]
+    env:
+      TEST_ENV: staging
+    steps:
+      - uses: actions/checkout@v4   # the tests live in the repo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-test.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: artifact
+
+      - name: Unit tests
+        run: |
+          echo "Running unit tests on Python ${{ matrix.python }}..."
+          pytest tests --ignore=tests/integration -v \
+            || { echo "::error::Unit tests failed on Python ${{ matrix.python }}"; exit 1; }
+
+      - name: Integration tests (build.zip, TEST_ENV=${{ env.TEST_ENV }})
+        if: ${{ !cancelled() }}   # also run when unit tests failed, so one run shows both
+        env:
+          BUILD_ZIP: artifact/build.zip
+        run: |
+          echo "Running integration tests against $BUILD_ZIP..."
+          pytest tests/integration -v \
+            || { echo "::error::Integration tests failed on Python ${{ matrix.python }}"; exit 1; }
+
+  # Releases wait for the test gate. If any test fails, these jobs are skipped.
+  deploy-dev:
+    needs: [build, test]
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -95,7 +125,7 @@ jobs:
 
   # Staging and production release the same build-artifact as dev.
   deploy-staging:
-    needs: build
+    needs: [build, test]
     permissions:
       contents: write
     uses: ./.github/workflows/release-stage.yml
@@ -230,7 +260,7 @@ jobs:
 
   # Post the outcome on the "Release log" issue, whether production shipped or not.
   notify:
-    needs: [build, deploy-staging, deploy-production]
+    needs: [build, test, deploy-staging, deploy-production]
     if: always() && needs.build.result == 'success' && vars.RELEASE_LOG_ISSUE != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -241,6 +271,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.build.outputs.version }}
+      TESTS: ${{ needs.test.result }}
       STAGING: ${{ needs.deploy-staging.result }}
       PRODUCTION: ${{ needs.deploy-production.result }}
       ISSUE: ${{ vars.RELEASE_LOG_ISSUE }}
@@ -253,7 +284,10 @@ jobs:
                    | select(any(.environments[]; .name == "production"))
                    | "\(.user.login) (\(.state)): \(if (.comment // "") == "" then "no comment" else .comment end)"]
                    | join("; ")')
-          if [ "$PRODUCTION" = "success" ]; then
+          if [ "$TESTS" != "success" ]; then
+            head="Tests $TESTS for $VERSION: nothing was released"
+            link="$run_url"
+          elif [ "$PRODUCTION" = "success" ]; then
             head="Released prod-v$VERSION"
             link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/prod-v$VERSION"
           else
@@ -263,6 +297,7 @@ jobs:
           gh issue comment "$ISSUE" --body "**$head**
 
           - Link: $link
+          - Tests: $TESTS
           - Production review: ${approval:-none}
           - Commit: $GITHUB_SHA
           - Run: $run_url"

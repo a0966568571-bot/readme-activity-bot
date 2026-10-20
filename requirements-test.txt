@@ -1,0 +1,6 @@
+# Test tools for CI. Pinned so a new release cannot change results without a PR.
+# These are the newest versions that still install on Python 3.9 (the oldest in our matrix):
+# pytest 9 and coverage 7.11 dropped 3.9.
+pytest==8.4.2
+pytest-cov==7.1.0
+coverage==7.10.7

@@ -8,6 +8,7 @@ Modes:
 
 Settings come from environment variables so CI can tune them without code changes:
   GITHUB_TOKEN, GITHUB_REPOSITORY      required unless --check
+  GITHUB_API_URL  API base URL                    (default https://api.github.com)
   ITEM_LIMIT      items per list                  (default 5)
   MAX_RETRIES     retries per request             (default 4)
   BACKOFF_BASE    exponential backoff base, sec   (default 2)
@@ -34,7 +35,8 @@ END = "<!-- ACTIVITY:END -->"
 NOTE = "_Updated automatically by GitHub Actions. Do not edit this block by hand._"
 BOT_COMMIT_PREFIX = "chore(readme):"
 BOT_LOGINS = {"github-actions[bot]"}
-API = "https://api.github.com"
+# GitHub Actions sets GITHUB_API_URL; the integration tests point it at a local fake API.
+API = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 

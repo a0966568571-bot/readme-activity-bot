@@ -223,3 +223,6 @@ __marimo__/
 .cache/
 metrics.json
 *.diff
+
+# test reports
+reports/
