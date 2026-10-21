@@ -32,6 +32,7 @@ _Updated automatically by GitHub Actions. Do not edit this block by hand._
 
 **Recently closed issues**
 
+- 2026-10-20 [#21 Tests failing on demo/issue-automation](https://github.com/a0966568571-bot/readme-activity-bot/issues/21)
 - 2026-10-06 [#2 Add CI guardrails and run reporting for README automation](https://github.com/a0966568571-bot/readme-activity-bot/issues/2)
 - 2026-10-05 [#1 Automate README "Recent Activity" section with GitHub Actions](https://github.com/a0966568571-bot/readme-activity-bot/issues/1)
 <!-- ACTIVITY:END -->
